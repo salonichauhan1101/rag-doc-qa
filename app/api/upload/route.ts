@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
         // implementation so pdf.js doesn't try to use browser-only DOMMatrix
         import { CanvasFactory } from 'pdf-parse/worker'
         import { PDFParse } from 'pdf-parse'
+        import { getVerifiedUserId } from '@/lib/auth'
 
         export const runtime = 'nodejs'
 
@@ -48,17 +49,20 @@ import { NextRequest, NextResponse } from 'next/server'
         return chunks
         }
 
+
+
         export async function POST(request: NextRequest) {
         try {
+        const userId = await getVerifiedUserId(request)
+        if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+
         const formData = await request.formData()
         const file = formData.get('file') as File | null
-        const userId = formData.get('userId') as string | null
 
         if (!file) {
         return NextResponse.json({ error: 'No file provided' }, { status: 400 })
-        }
-        if (!userId) {
-        return NextResponse.json({ error: 'No user id provided' }, { status: 400 })
         }
         if (file.type !== 'application/pdf') {
         return NextResponse.json({ error: 'Only PDF files are supported' }, { status: 400 })

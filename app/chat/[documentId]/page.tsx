@@ -41,10 +41,16 @@ export default function ChatPage() {
     setError('')
 
     try {
+      const { data: sessionData } = await supabaseBrowser.auth.getSession()
+      const token = sessionData.session?.access_token
+
       const res = await fetch('/api/query', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documentId, userId: user.id, question: userMessage.content }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ documentId, question: userMessage.content }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Query failed')

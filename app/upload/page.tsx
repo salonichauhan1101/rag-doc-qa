@@ -33,10 +33,16 @@ export default function UploadPage() {
 
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('userId', user.id)
 
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      const { data: sessionData } = await supabaseBrowser.auth.getSession()
+      const token = sessionData.session?.access_token
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Upload failed')
       setStatus('done')

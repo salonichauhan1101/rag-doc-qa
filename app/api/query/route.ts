@@ -1,23 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
         import { supabaseServer } from '@/lib/supabase-server'
         import { embedText, generateAnswer } from '@/lib/gemini'
+        import { getVerifiedUserId } from '@/lib/auth'
+
+        // Chunks below this similarity score are treated as "not actually relevant"
+        // rather than fed to Gemini — otherwise match_chunks always returns its
+        // top 5 closest chunks even when none of them are a good match, and Gemini
+        // may still generate a plausible-sounding answer from irrelevant content.
+        const SIMILARITY_THRESHOLD = 0.5
 
         export async function POST(request: NextRequest) {
         try {
-        const { documentId, userId, question } = await request.json()
+        const userId = await getVerifiedUserId(request)
+        if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
 
-        if (!documentId || !userId || !question) {
+        const { documentId, question } = await request.json()
+
+        if (!documentId || !question) {
         return NextResponse.json(
-        { error: 'documentId, userId, and question are all required' },
+        { error: 'documentId and question are required' },
         { status: 400 }
         )
         }
 
-
-
-        // Security check: supabaseServer bypasses RLS, so we manually confirm
-        // this document actually belongs to the requesting user before
-        // running any search against it.
         const { data: doc, error: docError } = await supabaseServer
         .from('documents')
         .select('id')
@@ -29,11 +36,8 @@ import { NextRequest, NextResponse } from 'next/server'
         return NextResponse.json({ error: 'Document not found' }, { status: 404 })
         }
 
-        // 1. Embed the user's question — note taskType is RETRIEVAL_QUERY here,
-        // not RETRIEVAL_DOCUMENT (that's only for embedding chunks on upload).
         const questionEmbedding = await embedText(question, 'RETRIEVAL_QUERY')
 
-        // 2. Find the most similar chunks via Postgres cosine similarity search
         const { data: matches, error: matchError } = await supabaseServer.rpc(
         'match_chunks',
         {
@@ -44,19 +48,23 @@ import { NextRequest, NextResponse } from 'next/server'
         )
         if (matchError) throw matchError
 
-        if (!matches || matches.length === 0) {
+        const relevantMatches = (matches ?? []).filter(
+        (m: any) => m.similarity >= SIMILARITY_THRESHOLD
+        )
+
+        if (relevantMatches.length === 0) {
         return NextResponse.json({
-        answer: "I couldn't find anything relevant to that question in the document.",
+        answer:
+        "I couldn't find anything in the document relevant to that question. Try rephrasing, or ask something more specific to its content.",
         sources: [],
         })
         }
 
-        // 3. Feed the retrieved chunks + question to Gemini for a grounded answer
-        const answer = await generateAnswer(question, matches)
+        const answer = await generateAnswer(question, relevantMatches)
 
         return NextResponse.json({
         answer,
-        sources: matches.map((m: any) => ({
+        sources: relevantMatches.map((m: any) => ({
         page: m.page_number,
         similarity: m.similarity,
         excerpt: m.content.slice(0, 150),
