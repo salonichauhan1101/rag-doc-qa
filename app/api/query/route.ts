@@ -13,6 +13,8 @@ import { NextRequest, NextResponse } from 'next/server'
         )
         }
 
+
+
         // Security check: supabaseServer bypasses RLS, so we manually confirm
         // this document actually belongs to the requesting user before
         // running any search against it.
