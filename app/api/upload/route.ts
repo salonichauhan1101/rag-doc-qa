@@ -1,29 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
-        import { supabaseServer } from '@/lib/supabase'
+        import { supabaseServer } from '@/lib/supabase-server'
         import { embedText } from '@/lib/gemini'
-        import pdf from 'pdf-parse'
+        // Import this before PDFParse — provides a Node-compatible canvas
+        // implementation so pdf.js doesn't try to use browser-only DOMMatrix
+        import { CanvasFactory } from 'pdf-parse/worker'
+        import { PDFParse } from 'pdf-parse'
 
         export const runtime = 'nodejs'
 
-        // Extracts text page-by-page (not just as one big blob) so we can
-        // later tell the user which page an answer came from.
+        // Extracts text page-by-page using pdf-parse's v2 API.
+        // We get the total page count first, then pull each page's text
+        // individually so we can tag every chunk with its page number later.
         async function extractPagesFromPdf(
         buffer: Buffer
         ): Promise<{ pageNumber: number; text: string }[]> {
-        const pages: { pageNumber: number; text: string }[] = []
-        let pageNumber = 0
+        const parser = new PDFParse({ data: buffer, CanvasFactory })
 
-        await pdf(buffer, {
-        pagerender: async (pageData: any) => {
-        pageNumber++
-        const textContent = await pageData.getTextContent()
-        const text = textContent.items.map((item: any) => item.str).join(' ')
-        pages.push({ pageNumber, text })
-        return text
-        },
-        })
+        try {
+        const info = await parser.getInfo()
+        const totalPages = info.total
+        const pages: { pageNumber: number; text: string }[] = []
+
+        for (let i = 1; i <= totalPages; i++) {
+        const result = await parser.getText({ partial: [i] })
+        pages.push({ pageNumber: i, text: result.text })
+        }
 
         return pages
+        } finally {
+        await parser.destroy() // always free memory, even if something throws
+        }
         }
 
         // Splits a page's text into overlapping ~150-word chunks.
