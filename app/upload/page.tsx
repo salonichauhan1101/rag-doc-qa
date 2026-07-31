@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabaseBrowser } from '@/lib/supabase-browser'
 import type { User } from '@supabase/supabase-js'
+import ReactMarkdown from 'react-markdown'
 
 export default function UploadPage() {
   const router = useRouter()
@@ -11,6 +12,7 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null)
   const [status, setStatus] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle')
   const [message, setMessage] = useState('')
+  const [documentId, setDocumentId] = useState<string | null>(null)
 
   useEffect(() => {
     supabaseBrowser.auth.getUser().then(({ data }) => {
@@ -39,6 +41,7 @@ export default function UploadPage() {
       if (!res.ok) throw new Error(data.error || 'Upload failed')
       setStatus('done')
       setMessage(`Success — indexed ${data.pages} pages into ${data.chunks} chunks.`)
+      setDocumentId(data.documentId)
     } catch (err: any) {
       setStatus('error')
       setMessage(err.message)
@@ -66,6 +69,14 @@ export default function UploadPage() {
         </button>
         {message && (
           <p className={status === 'error' ? 'text-red-600' : 'text-green-600'}>{message}</p>
+        )}
+        {documentId && (
+
+            <a href={`/chat/${documentId}`}
+            className="block text-center rounded-md border border-black px-3 py-2 hover:bg-gray-50"
+          >
+            Chat with this document →
+          </a>
         )}
       </form>
     </main>
