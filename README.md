@@ -66,6 +66,7 @@ Stuffing an entire document into a single prompt doesn't scale (context limits, 
 
 ## Architecture
 
+
 Two flows: one-time ingestion (upload → extract → chunk → embed → store), and per-question retrieval (embed question → similarity search → generate grounded answer).
 
 Row Level Security is enforced at the database level, so even with a compromised frontend, users can only ever access their own documents and chunks.
